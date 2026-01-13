@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Techare Core Journey Interactive Prototype</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { font-family: Inter, Arial, sans-serif; background: #f6f7f9; margin: 0; padding: 0; }
+    .container { max-width: 400px; margin: 32px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 8px #0001; padding: 24px; }
+    h2 { color: #0A74DA; margin-top: 0; }
+    .screen { display: none; }
+    .screen.active { display: block; }
+    .btn { display: inline-block; margin: 8px 4px 0 0; padding: 10px 18px; border-radius: 6px; border: none; font-size: 1rem; cursor: pointer; }
+    .btn-primary { background: #0A74DA; color: #fff; }
+    .btn-secondary { background: #0AA88F; color: #fff; }
+    .btn-ghost { background: none; color: #0A74DA; border: 1px solid #0A74DA; }
+    .progress { margin: 12px 0; text-align: center; }
+    .step { display: inline-block; width: 16px; height: 16px; border-radius: 50%; background: #e0e7ef; margin: 0 2px; }
+    .step.active { background: #0A74DA; }
+    .input-row { margin: 12px 0; }
+    .input-row label { display: block; margin-bottom: 4px; }
+    .input-row input[type="text"] { width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ccc; }
+    .checkbox-row { margin: 12px 0; }
+    .checkbox-row label { margin-left: 8px; }
+    .success { color: #2E7D32; font-weight: bold; }
+    .error { color: #D32F2F; font-weight: bold; }
+    .details { font-size: 0.95em; color: #667085; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Device Onboarding Screen -->
+    <div class="screen active" id="onboarding">
+      <h2>Add Device</h2>
+      <button class="btn btn-primary" onclick="showScreen('scan')">Scan QR</button>
+      <button class="btn btn-secondary" onclick="showScreen('manual')">Manual Entry</button>
+      <div class="input-row"><label>Device List</label>
+        <ul style="padding-left: 18px;">
+          <li>Camera 1 (online)</li>
+          <li>Speaker (offline)</li>
+        </ul>
+      </div>
+      <button class="btn btn-primary" onclick="showScreen('pair')">Pair Device</button>
+    </div>
+    <!-- Scan QR Screen -->
+    <div class="screen" id="scan">
+      <h2>Scan QR Code</h2>
+      <div class="details">(Simulated) Camera permission granted.<br>Device found: Camera 1</div>
+      <button class="btn btn-primary" onclick="showScreen('telemetry')">Pair Device</button>
+      <button class="btn btn-ghost" onclick="showScreen('onboarding')">Back</button>
+    </div>
+    <!-- Manual Entry Screen -->
+    <div class="screen" id="manual">
+      <h2>Manual Entry</h2>
+      <div class="input-row">
+        <label>Enter Device Code</label>
+        <input type="text" placeholder="e.g. CAM-1234" id="deviceCode">
+      </div>
+      <button class="btn btn-primary" onclick="showScreen('telemetry')">Pair Device</button>
+      <button class="btn btn-ghost" onclick="showScreen('onboarding')">Back</button>
+    </div>
+    <!-- Telemetry Opt-in Screen -->
+    <div class="screen" id="telemetry">
+      <h2>Telemetry Opt-in</h2>
+      <div class="checkbox-row">
+        <input type="checkbox" id="telemetryOpt" checked>
+        <label for="telemetryOpt">Opt-in to device telemetry</label>
+      </div>
+      <button class="btn btn-primary" onclick="showScreen('onboardSuccess')">Confirm</button>
+    </div>
+    <!-- Onboarding Success Screen -->
+    <div class="screen" id="onboardSuccess">
+      <h2 class="success">Device Paired!</h2>
+      <button class="btn btn-primary" onclick="showScreen('diagnostics')">Run Diagnostics</button>
+    </div>
+    <!-- Diagnostics Result Screen -->
+    <div class="screen" id="diagnostics">
+      <h2>Diagnostics Result</h2>
+      <div class="details">Device: Camera 1<br>Status: Offline</div>
+      <div class="details">Issue: Firmware mismatch<br>Confidence: 92%</div>
+      <button class="btn btn-primary" onclick="showScreen('repair1')">Start Guided Repair</button>
+      <button class="btn btn-secondary" onclick="showScreen('escalate')">Escalate to Technician</button>
+      <button class="btn btn-ghost" onclick="toggleDetails()">Details ▼</button>
+      <div class="details" id="diagDetails" style="display:none;">Raw logs and telemetry here...</div>
+    </div>
+    <!-- Escalate Screen -->
+    <div class="screen" id="escalate">
+      <h2>Escalate to Technician</h2>
+      <div class="details">Diagnostic summary and job card prefilled.</div>
+      <button class="btn btn-primary" onclick="showScreen('onboarding')">Back to Home</button>
+    </div>
+    <!-- Guided Repair Step 1 -->
+    <div class="screen" id="repair1">
+      <h2>Guided Repair 1/3</h2>
+      <div class="details">Step: Reboot device<br>Safety: Unplug first!</div>
+      <div class="progress"><span class="step active"></span><span class="step"></span><span class="step"></span></div>
+      <button class="btn btn-primary" onclick="showScreen('repair2')">Next</button>
+      <button class="btn btn-ghost" onclick="showScreen('diagnostics')">Cancel</button>
+    </div>
+    <!-- Guided Repair Step 2 -->
+    <div class="screen" id="repair2">
+      <h2>Guided Repair 2/3</h2>
+      <div class="details">Step: Reconnect Wi-Fi<br>Safety: Wait for LED to blink.</div>
+      <div class="progress"><span class="step"></span><span class="step active"></span><span class="step"></span></div>
+      <button class="btn btn-primary" onclick="showScreen('repair3')">Next</button>
+      <button class="btn btn-secondary" onclick="showScreen('repair1')">Prev</button>
+      <button class="btn btn-ghost" onclick="showScreen('diagnostics')">Cancel</button>
+    </div>
+    <!-- Guided Repair Step 3 -->
+    <div class="screen" id="repair3">
+      <h2>Guided Repair 3/3</h2>
+      <div class="details">Step: Confirm live feed<br>Safety: Plug device back in.</div>
+      <div class="progress"><span class="step"></span><span class="step"></span><span class="step active"></span></div>
+      <button class="btn btn-primary" onclick="showScreen('confirm')">Confirm Repair</button>
+      <button class="btn btn-secondary" onclick="showScreen('repair2')">Prev</button>
+      <button class="btn btn-ghost" onclick="showScreen('diagnostics')">Cancel</button>
+    </div>
+    <!-- Confirmation Screen -->
+    <div class="screen" id="confirm">
+      <h2 class="success">Repair Confirmed!</h2>
+      <div class="details">Device health check passed.<br>Repair logged.</div>
+      <button class="btn btn-primary" onclick="showScreen('onboarding')">Back to Home</button>
+    </div>
+  </div>
+  <script>
+    function showScreen(id) {
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+    }
+    function toggleDetails() {
+      var d = document.getElementById('diagDetails');
+      d.style.display = d.style.display === 'none' ? 'block' : 'none';
+    }
+  </script>
+</body>
+</html>

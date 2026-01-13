@@ -1,0 +1,24 @@
+{
+  "type": "excalidraw",
+  "version": 2,
+  "source": "bmad-data-flow-diagram",
+  "elements": [
+    {"type": "rectangle", "id": "user", "x": 100, "y": 100, "width": 120, "height": 40, "text": "User"},
+    {"type": "rectangle", "id": "mobile_app", "x": 300, "y": 100, "width": 140, "height": 40, "text": "Mobile App"},
+    {"type": "rectangle", "id": "backend_api", "x": 550, "y": 100, "width": 140, "height": 40, "text": "Backend API"},
+    {"type": "rectangle", "id": "ai_ml_service", "x": 800, "y": 100, "width": 160, "height": 40, "text": "AI/ML Service"},
+    {"type": "rectangle", "id": "database", "x": 550, "y": 250, "width": 140, "height": 40, "text": "Database (Firebase)"},
+    {"type": "rectangle", "id": "technician", "x": 800, "y": 250, "width": 120, "height": 40, "text": "Technician"},
+    {"type": "rectangle", "id": "device", "x": 300, "y": 250, "width": 120, "height": 40, "text": "Device"},
+    {"type": "arrow", "start": "user", "end": "mobile_app", "text": "inputs data"},
+    {"type": "arrow", "start": "mobile_app", "end": "backend_api", "text": "sends user/device data"},
+    {"type": "arrow", "start": "backend_api", "end": "ai_ml_service", "text": "diagnostic request"},
+    {"type": "arrow", "start": "ai_ml_service", "end": "backend_api", "text": "diagnostic result"},
+    {"type": "arrow", "start": "backend_api", "end": "database", "text": "store/retrieve data"},
+    {"type": "arrow", "start": "backend_api", "end": "mobile_app", "text": "results/guides"},
+    {"type": "arrow", "start": "device", "end": "backend_api", "text": "telemetry data"},
+    {"type": "arrow", "start": "mobile_app", "end": "user", "text": "displays results"},
+    {"type": "arrow", "start": "backend_api", "end": "technician", "text": "request/notify"},
+    {"type": "arrow", "start": "technician", "end": "backend_api", "text": "response"}
+  ]
+}
