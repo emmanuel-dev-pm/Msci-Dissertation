@@ -1,16 +1,18 @@
 import { Text, View, TextInput, ActivityIndicator, KeyboardAvoidingView, TouchableOpacity } from 'react-native';
-import React, {  } from "react"
+import React, {  useState} from "react"
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth"
 import {db} from "../firebase"
-import {router } from "expo-router"
+import { router, useLocalSearchParams } from "expo-router"
+import{FIREBASE_AUTH} from "../firebase"
 
 
 const SignUp = () => {
+    const {type} = useLocalSearchParams()
     const [email, setEmail] = useState("")
     
     const [password, setPassword] = useState("")
     const [loading, setLoading] = useState(false)
-    const auth = db
+    const auth = FIREBASE_AUTH
     
     const signin = async() => {
         setLoading(true)
@@ -21,10 +23,12 @@ const SignUp = () => {
         catch (error) { 
             console.log(error)
             alert("Sign in failed:"+ error.message)
+        } finally { setLoading(false)
+            
         }
     }
 
-    const singup = async() => {
+    const signup = async() => {
         setLoading(true)
         try {
             const user = await createUserWithEmailAndPassword(auth, email, password)
@@ -33,6 +37,8 @@ const SignUp = () => {
         catch (error) { 
             console.log(error)
             alert("Sign in failed:"+ error.message)
+        } finally { setLoading(false)
+            
         }
     }
     
@@ -55,14 +61,14 @@ const SignUp = () => {
                 autoCapitalize="none"
                     placeholder="Email"
                     value={email}
-                    onChange={setEmail}
+                    onChangeText={setEmail}
 
                 />
                  <TextInput
                 autoCapitalize="none"
                     placeholder="Password"
-                value={setPassword}
-
+                value={password}
+                onChangeText={setPassword}
                 />
             </View>
 

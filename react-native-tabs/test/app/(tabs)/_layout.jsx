@@ -4,13 +4,13 @@ import { Link, Tabs } from 'expo-router';
 import { Pressable } from 'react-native';
 import { getAuth } from 'firebase/auth';
 import { router } from 'expo-router';
-
+import { useState,useEffect } from 'react';
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
 import { useClientOnlyValue } from '@/components/useClientOnlyValue';
 
 // You can explore the built-in icon families and icons on the web at https://icons.expo.fyi/
-function TabBarIcon(
+function TabBarIcon( props
 ) {
   return <FontAwesome size={28} style={{ marginBottom: -3 }} {...props} />;
 }
@@ -19,12 +19,19 @@ export default function TabLayout() {
   const [loading, setLoading] = useState(false)
   const colorScheme = useColorScheme();
 
-  getAuth().onAuthStateChanged((user) => {
-    setLoading(true)
-    if (!user) {
-      router.replace("/")
-    }
-})
+
+  useEffect(() => {
+    const unsubscribe = getAuth().onAuthStateChanged((user) => {
+      console.log("Auth state changed:", user);
+      if (!user) {
+        router.replace("/login");
+      }
+    })
+    return unsubscribe;
+  }
+   , []);
+
+
 
 
   return (
