@@ -4,7 +4,7 @@ import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "fire
 import {db} from "../firebase"
 import { router, useLocalSearchParams } from "expo-router"
 import{FIREBASE_AUTH} from "../firebase"
-
+import GoogleSignIn from "../components/GoogleSignIn"
 
 const SignUp = () => {
     const {type} = useLocalSearchParams()
@@ -52,7 +52,7 @@ const SignUp = () => {
         }
   
 
-            <Text>
+            <Text style={{color:"#fff"}}>  
                 {type === "login" ? "Welcome Back": "Create Your Account"}
             </Text>
             <View>
@@ -78,8 +78,9 @@ const SignUp = () => {
                 </TouchableOpacity> :
                 <TouchableOpacity onPress={signup}>
                     <Text>Create Account</Text>
-            </TouchableOpacity>
-        }
+                </TouchableOpacity>
+            }
+            <GoogleSignIn/>
    
    </KeyboardAvoidingView> 
 )

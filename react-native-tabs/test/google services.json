@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "345878976470",
+    "project_id": "techaire-6eff2",
+    "storage_bucket": "techaire-6eff2.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:345878976470:android:f663e839525add5c2b3677",
+        "android_client_info": {
+          "package_name": "com.techaire.appname"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "345878976470-fm8llcco51gtqts6ps3aqae7cdujoeh9.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.techaire.appname",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "345878976470-1rf500bs8c3bbnkobq5jpg1kqq57ifk1.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCdhIPfUfeXhLesDg7-ZpXifrdfXSmuRbQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "345878976470-1rf500bs8c3bbnkobq5jpg1kqq57ifk1.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
