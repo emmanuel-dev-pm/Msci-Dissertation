@@ -1,304 +1,188 @@
-"""
-Device Fault Classification Model
-Classifies device issues for AI-guided repair workflows
-
-This classifier predicts device fault categories to enable:
-- Intelligent diagnostics recommendations
-- Guided repair flow routing
-- Device onboarding issue detection
-"""
-
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split, cross_val_score
-from sklearn.preprocessing import StandardScaler, LabelEncoder
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
 import joblib
 import os
 from pathlib import Path
+from sklearn.model_selection import train_test_split, StratifiedKFold
+from sklearn.preprocessing import LabelEncoder, LabelBinarizer
+from sklearn.metrics import classification_report, accuracy_score
+from xgboost import XGBClassifier
 
+def load_and_inspect_csv(csv_path):
+    """Load CSV and print a short summary of labels."""
+    df = pd.read_csv(csv_path)
+    print(f"Loaded {csv_path}: {df.shape[0]} rows")
+    if 'Label' in df.columns:
+        print("\nLabel distribution:\n", df['Label'].value_counts())
+    return df
+
+def prepare_features(df, target_col='decision_label'):
+    """Prepare features and label series from dataframe.
+
+    - Select only the expected features that actually exist in `df`.
+    - Numeric columns are coerced to numeric and imputed with median.
+    - Categorical/object columns are left as-is (CatBoost can handle them).
+    """
+    df = df.copy()
+
+    # Expected features from techare_training_data.csv
+    features = [
+        'temperature', 'power_consumption', 'user_activity', 
+        'device_mode', 'anomaly_flag'
+    ]
+
+    existing_features = [c for c in features if c in df.columns]
+    if not existing_features:
+        raise ValueError(f"None of the expected features found in dataframe. Expected one of: {features}")
+
+    # Coerce numeric-like columns to numeric and impute missing values with median
+    for col in existing_features:
+        if not pd.api.types.is_object_dtype(df[col]) and not isinstance(df[col].dtype, pd.CategoricalDtype):
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+            df[col] = df[col].fillna(df[col].median())
+
+    X = df[existing_features].copy()
+    y = df[target_col] if target_col in df.columns else None
+    return X, y
 
 class DeviceFaultClassifier:
-    """Multi-class classifier for device fault diagnosis"""
-    
-    def __init__(self, model_path=None):
-        """
-        Initialize the classifier
-        
-        Args:
-            model_path: Path to load pre-trained model. If None, creates new model.
-        """
-        self.model = None
-        self.scaler = None
-        self.label_encoder = None
-        self.feature_names = None
-        self.model_path = model_path
-        
-        if model_path and os.path.exists(model_path):
-            self.load_model(model_path)
-        else:
-            self._initialize_new_model()
-    
-    def _initialize_new_model(self):
-        """Initialize a new Random Forest classifier"""
-        self.model = RandomForestClassifier(
-            n_estimators=100,
-            max_depth=10,
+    """Classifier using XGBoost for device fault diagnosis."""
+
+    def __init__(self, n_estimators=200, max_depth=6, learning_rate=0.1, use_gpu=False, class_weights=None):
+        self.n_estimators = n_estimators
+        self.max_depth = max_depth
+        self.learning_rate = learning_rate
+        self.use_gpu = use_gpu
+        self.class_weights = class_weights  # dict like {'Normal': 1, 'Warning': 2, 'Critical': 3}
+
+        self.model = XGBClassifier(
+            n_estimators=self.n_estimators,
+            max_depth=self.max_depth,
+            learning_rate=self.learning_rate,
             random_state=42,
-            n_jobs=-1
+            verbosity=0,
+            eval_metric='mlogloss'
         )
-        self.scaler = StandardScaler()
         self.label_encoder = LabelEncoder()
-    
-    def train(self, X_train, y_train, validation_split=0.2):
-        """
-        Train the classifier on labeled data
+        self.categorical_encoders = {}  # Store encoders for categorical features
+        self.feature_names = None
+
+    def _encode_categoricals(self, X, fit=False):
+        """Encode categorical columns to numeric for XGBoost."""
+        X = X.copy()
+        cat_cols = [c for c in X.columns if pd.api.types.is_object_dtype(X[c])]
         
-        Args:
-            X_train: Training features (DataFrame or array)
-            y_train: Training labels (Series or array)
-            validation_split: Fraction of data to use for validation
+        for col in cat_cols:
+            if fit:
+                le = LabelEncoder()
+                X[col] = le.fit_transform(X[col].astype(str))
+                self.categorical_encoders[col] = le
+            else:
+                le = self.categorical_encoders.get(col)
+                if le:
+                    X[col] = le.transform(X[col].astype(str))
+        return X
+
+    def train(self, X_train, y_train, cv_splits=5):
+        self.feature_names = X_train.columns.tolist()
         
-        Returns:
-            dict: Training metrics including accuracy and cross-validation scores
-        """
-        # Store feature names if DataFrame provided
-        if isinstance(X_train, pd.DataFrame):
-            self.feature_names = X_train.columns.tolist()
-            X_train = X_train.values
+        # Encode categorical features
+        X_train_encoded = self._encode_categoricals(X_train, fit=True)
+        y_encoded = self.label_encoder.fit_transform(y_train)
+
+        # Calculate sample weights if class_weights provided
+        sample_weight = None
+        if self.class_weights:
+            sample_weight = np.ones(len(y_train))
+            for class_name, weight in self.class_weights.items():
+                if class_name in self.label_encoder.classes_:
+                    class_idx = list(self.label_encoder.classes_).index(class_name)
+                    mask = y_encoded == class_idx
+                    sample_weight[mask] = weight
         
-        # Encode labels
-        y_train_encoded = self.label_encoder.fit_transform(y_train)
+        # Fit final model
+        self.model.fit(X_train_encoded, y_encoded, sample_weight=sample_weight)
         
-        # Scale features
-        X_train_scaled = self.scaler.fit_transform(X_train)
+        # Manual cross-validation
+        skf = StratifiedKFold(n_splits=cv_splits, shuffle=True, random_state=42)
+        cv_scores = []
+        for train_idx, val_idx in skf.split(X_train_encoded, y_encoded):
+            X_tr, X_val = X_train_encoded.iloc[train_idx], X_train_encoded.iloc[val_idx]
+            y_tr, y_val = y_encoded[train_idx], y_encoded[val_idx]
+            
+            model_cv = XGBClassifier(
+                n_estimators=self.n_estimators,
+                max_depth=self.max_depth,
+                learning_rate=self.learning_rate,
+                random_state=42,
+                verbosity=0,
+                eval_metric='mlogloss'
+            )
+            
+            # Apply weights to CV fold
+            sw_cv = None
+            if sample_weight is not None:
+                sw_cv = sample_weight[train_idx]
+            
+            model_cv.fit(X_tr, y_tr, sample_weight=sw_cv)
+            preds = model_cv.predict(X_val)
+            cv_scores.append(accuracy_score(y_val, preds))
         
-        # Train model
-        self.model.fit(X_train_scaled, y_train_encoded)
+        train_acc = accuracy_score(y_encoded, self.model.predict(X_train_encoded))
         
-        # Calculate metrics
-        train_pred = self.model.predict(X_train_scaled)
-        train_accuracy = accuracy_score(y_train_encoded, train_pred)
-        
-        # Cross-validation
-        cv_scores = cross_val_score(
-            self.model, X_train_scaled, y_train_encoded, cv=5
-        )
-        
-        metrics = {
-            'train_accuracy': train_accuracy,
-            'cv_mean': cv_scores.mean(),
-            'cv_std': cv_scores.std(),
-            'cv_scores': cv_scores
+        return {
+            'train_accuracy': train_acc,
+            'cv_mean': float(np.mean(cv_scores)),
+            'cv_std': float(np.std(cv_scores))
         }
-        
-        return metrics
-    
+
     def evaluate(self, X_test, y_test):
-        """
-        Evaluate classifier on test data
-        
-        Args:
-            X_test: Test features
-            y_test: Test labels
-        
-        Returns:
-            dict: Classification metrics and detailed report
-        """
-        if self.model is None:
-            raise ValueError("Model must be trained first")
-        
-        if isinstance(X_test, pd.DataFrame):
-            X_test = X_test.values
-        
-        X_test_scaled = self.scaler.transform(X_test)
+        X_test_encoded = self._encode_categoricals(X_test, fit=False)
         y_test_encoded = self.label_encoder.transform(y_test)
-        
-        predictions = self.model.predict(X_test_scaled)
-        
-        accuracy = accuracy_score(y_test_encoded, predictions)
-        
-        report = {
-            'accuracy': accuracy,
-            'classification_report': classification_report(
-                y_test_encoded, predictions, 
-                target_names=self.label_encoder.classes_
-            ),
-            'confusion_matrix': confusion_matrix(y_test_encoded, predictions),
-            'predictions': self.label_encoder.inverse_transform(predictions)
+        predictions = self.model.predict(X_test_encoded)
+
+        return {
+            'accuracy': accuracy_score(y_test_encoded, predictions),
+            'report': classification_report(y_test_encoded, predictions, target_names=self.label_encoder.classes_)
         }
-        
-        return report
-    
-    def predict(self, X):
-        """
-        Make predictions on new data
-        
-        Args:
-            X: Features (DataFrame or array)
-        
-        Returns:
-            array: Predicted fault categories
-        """
-        if self.model is None:
-            raise ValueError("Model must be trained first")
-        
-        if isinstance(X, pd.DataFrame):
-            X = X.values
-        
-        X_scaled = self.scaler.transform(X)
-        predictions = self.model.predict(X_scaled)
-        
-        return self.label_encoder.inverse_transform(predictions)
-    
-    def predict_proba(self, X):
-        """
-        Get prediction probabilities for each fault class
-        
-        Args:
-            X: Features (DataFrame or array)
-        
-        Returns:
-            DataFrame: Probabilities for each class
-        """
-        if self.model is None:
-            raise ValueError("Model must be trained first")
-        
-        if isinstance(X, pd.DataFrame):
-            X = X.values
-        
-        X_scaled = self.scaler.transform(X)
-        probas = self.model.predict_proba(X_scaled)
-        
-        return pd.DataFrame(
-            probas,
-            columns=self.label_encoder.classes_
-        )
-    
-    def get_feature_importance(self):
-        """
-        Get feature importance scores
-        
-        Returns:
-            DataFrame: Features ranked by importance
-        """
-        if self.model is None:
-            raise ValueError("Model must be trained first")
-        
-        if self.feature_names is None:
-            feature_names = [f"feature_{i}" for i in range(self.model.n_features_in_)]
-        else:
-            feature_names = self.feature_names
-        
-        importances = self.model.feature_importances_
-        
-        importance_df = pd.DataFrame({
-            'feature': feature_names,
-            'importance': importances
-        }).sort_values('importance', ascending=False)
-        
-        return importance_df
-    
-    def save_model(self, filepath):
-        """Save trained model to disk"""
-        if self.model is None:
-            raise ValueError("No model to save")
-        
-        Path(filepath).parent.mkdir(parents=True, exist_ok=True)
-        
+
+    def save(self, filepath):
         model_data = {
             'model': self.model,
-            'scaler': self.scaler,
             'label_encoder': self.label_encoder,
+            'categorical_encoders': self.categorical_encoders,
             'feature_names': self.feature_names
         }
-        
         joblib.dump(model_data, filepath)
-        print(f"Model saved to {filepath}")
-    
-    def load_model(self, filepath):
-        """Load pre-trained model from disk"""
-        model_data = joblib.load(filepath)
-        
-        self.model = model_data['model']
-        self.scaler = model_data['scaler']
-        self.label_encoder = model_data['label_encoder']
-        self.feature_names = model_data['feature_names']
-        
-        print(f"Model loaded from {filepath}")
 
+if __name__ == '__main__':
+    # --- Execution Flow ---
+    csv_path = 'ml/techare_training_data.csv'
+    df = load_and_inspect_csv(csv_path)
 
-def create_sample_data():
-    """Create sample device fault data for demonstration"""
-    np.random.seed(42)
-    
-    n_samples = 500
-    
-    # Create synthetic device metrics
-    data = {
-        'battery_health': np.random.uniform(20, 100, n_samples),
-        'thermal_temp': np.random.uniform(25, 85, n_samples),
-        'memory_usage': np.random.uniform(30, 95, n_samples),
-        'cpu_load': np.random.uniform(10, 100, n_samples),
-        'signal_strength': np.random.uniform(-120, -30, n_samples),
-        'error_count': np.random.poisson(5, n_samples),
-        'uptime_hours': np.random.uniform(1, 1000, n_samples),
-    }
-    
-    X = pd.DataFrame(data)
-    
-    # Create labels based on feature patterns
-    y = []
-    for idx in range(len(X)):
-        if X.iloc[idx]['battery_health'] < 30:
-            y.append('battery_fault')
-        elif X.iloc[idx]['thermal_temp'] > 75:
-            y.append('thermal_issue')
-        elif X.iloc[idx]['memory_usage'] > 90:
-            y.append('memory_fault')
-        elif X.iloc[idx]['error_count'] > 10:
-            y.append('software_error')
-        else:
-            y.append('healthy')
-    
-    return X, pd.Series(y)
+    # 2. Preprocess
+    X, y = prepare_features(df, target_col='decision_label')
+    if y is None:
+        raise ValueError('Target column `decision_label` not found in CSV. Please provide a dataset with a `decision_label` column.')
 
+    # Validate that there are at least 2 classes and enough samples for stratified split
+    if y.nunique() < 2:
+        raise ValueError('Need at least two target classes to train.')
 
-if __name__ == "__main__":
-    print("Device Fault Classifier - Demo\n")
-    
-    # Create sample data
-    print("Generating sample device data...")
-    X, y = create_sample_data()
-    print(f"Data shape: {X.shape}")
-    print(f"Fault classes: {y.unique()}\n")
-    
-    # Split data
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
-    )
-    
-    # Train classifier
-    print("Training classifier...")
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+
+    # 3. Train using CatBoost
     classifier = DeviceFaultClassifier()
     metrics = classifier.train(X_train, y_train)
-    
+
+    # 4. Results
     print(f"Training Accuracy: {metrics['train_accuracy']:.4f}")
-    print(f"Cross-Val Mean: {metrics['cv_mean']:.4f} (+/- {metrics['cv_std']:.4f})\n")
-    
-    # Evaluate
-    print("Evaluating on test set...")
-    eval_metrics = classifier.evaluate(X_test, y_test)
-    print(f"Test Accuracy: {eval_metrics['accuracy']:.4f}\n")
-    print("Classification Report:")
-    print(eval_metrics['classification_report'])
-    
-    # Feature importance
-    print("\nTop Features:")
-    importance = classifier.get_feature_importance()
-    print(importance.head())
-    
-    # Save model
-    model_dir = Path(__file__).parent / "models"
-    classifier.save_model(str(model_dir / "device_fault_classifier.pkl"))
+    print(f"CV mean: {metrics['cv_mean']:.4f} (+/- {metrics['cv_std']:.4f})")
+    eval_results = classifier.evaluate(X_test, y_test)
+    print("\nClassification Report:\n", eval_results['report'])
+    print(f"\nTest Accuracy: {eval_results['accuracy']:.4f}")
+
+    # 5. Save
+    out_path = 'ml/device_fault_classifier_trained_cb.pkl'
+    classifier.save(out_path)
+    print(f"Saved trained model to {out_path}")

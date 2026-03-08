@@ -1,0 +1,7 @@
+{
+  "dependencies": {
+    "eas-cli": "^18.0.3",
+    "expo-auth-session": "^7.0.10",
+    "expo-crypto": "^15.0.8"
+  }
+}
