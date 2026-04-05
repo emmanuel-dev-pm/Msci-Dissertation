@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, accuracy_score
-from device_fault_classifier import DeviceFaultClassifier, load_and_inspect_csv, prepare_features
+from device_fault_classifier import DeviceFaultClassifier, infer_target_column, load_and_inspect_csv, prepare_features
 
 if __name__ == '__main__':
     # --- Execution Flow with Class Weights ---
@@ -10,9 +10,10 @@ if __name__ == '__main__':
     df = load_and_inspect_csv(csv_path)
 
     # 2. Preprocess
-    X, y = prepare_features(df, target_col='decision_label')
+    resolved_target_col = infer_target_column(df, preferred='decision_label')
+    X, y = prepare_features(df, target_col=resolved_target_col)
     if y is None:
-        raise ValueError('Target column `decision_label` not found in CSV.')
+        raise ValueError(f'Target column `{resolved_target_col}` not found in CSV.')
 
     # Validate that there are at least 2 classes and enough samples for stratified split
     if y.nunique() < 2:
